@@ -1,6 +1,6 @@
 name: dara_pubsub
 description: A new Flutter package project.
-version: 0.0.1
+version: 0.1.0
 homepage: https://github.com/dara-network/dara-pubsub-client/
 
 environment:
@@ -10,6 +10,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  jwt_decoder: ^2.0.1
   logging: ^1.0.1
   protobuf: ^2.0.0
   web_socket_channel: ^2.1.0

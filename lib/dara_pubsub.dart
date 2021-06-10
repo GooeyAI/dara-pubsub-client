@@ -4,18 +4,18 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:dara_pubsub/gen/pubsub.pb.dart';
+import 'package:jwt_decoder/jwt_decoder.dart';
 import 'package:logging/logging.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
-typedef AuthCallback = Future<String> Function();
+typedef TokenCallback = Future<String> Function();
 
 enum PubsubState { connecting, connected, disconnected }
 
 class Pubsub {
   static final _log = Logger("dara_pubsub");
 
-  final Uri url;
-  final AuthCallback authCallback;
+  final TokenCallback tokenCallback;
   final Duration reconnectDelay;
   final Duration pingInterval;
   final Duration pingTimeout;
@@ -36,8 +36,7 @@ class Pubsub {
       _stateController.stream.asBroadcastStream();
 
   Pubsub({
-    required this.url,
-    required this.authCallback,
+    required this.tokenCallback,
     this.pingTimeout = const Duration(seconds: 15),
     this.pingInterval = const Duration(seconds: 1),
     this.reconnectDelay = const Duration(seconds: 1),
@@ -76,10 +75,10 @@ class Pubsub {
     channel.stream.listen(
       _onData,
       onError: (e) {
-        _reconnect("stream error", e);
+        _reconnect("websocket error", e);
       },
       onDone: () {
-        _reconnect("stream closed");
+        _reconnect("websocket closed");
       },
       cancelOnError: true,
     );
@@ -88,12 +87,16 @@ class Pubsub {
   Future<WebSocketChannel?> _connectAuth() async {
     String? authToken = _cachedToken;
     if (authToken == null) {
-      _cachedToken = authToken = await authCallback();
+      _cachedToken = authToken = await tokenCallback();
     }
 
     WsClientMsg clientMsg = WsClientMsg(authToken: authToken);
     Uint8List bytes = clientMsg.writeToBuffer();
 
+    Map<String, dynamic> token = JwtDecoder.decode(authToken);
+    Uri url = Uri.parse(token["x-ws-url"]);
+
+    _log.fine("connecting to $url");
     WebSocketChannel channel = WebSocketChannel.connect(url);
     try {
       channel.sink.add(bytes);
@@ -118,7 +121,7 @@ class Pubsub {
   void _resetTimeoutTimer() {
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(pingTimeout, () {
-      _log.warning("ping/pong timeout, disconnecting");
+      _log.warning("disconnected because ping/pong timeout");
       disconnect();
     });
   }
