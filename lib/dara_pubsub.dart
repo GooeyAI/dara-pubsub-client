@@ -56,6 +56,10 @@ class Pubsub {
   static final Uint8List _pingBytes = WsClientMsg().writeToBuffer();
 
   Future<void> connect() async {
+    if (_explicitlyDisconnected) {
+      _explicitlyDisconnected = false;
+    }
+
     if (state != PubsubState.disconnected) {
       _log.warning("attempted to connect while $state, this will be ignored");
       return;
@@ -122,7 +126,7 @@ class Pubsub {
     _timeoutTimer?.cancel();
     _timeoutTimer = Timer(pingTimeout, () {
       _log.warning("disconnected because ping/pong timeout");
-      disconnect();
+      _disconnect();
     });
   }
 
@@ -145,12 +149,21 @@ class Pubsub {
 
     _log.finest(msg);
 
-    disconnect();
+    if (_explicitlyDisconnected) return;
+
+    _disconnect();
     await Future.delayed(reconnectDelay);
     await connect();
   }
 
+  bool _explicitlyDisconnected = false;
+
   void disconnect() {
+    _explicitlyDisconnected = true;
+    _disconnect();
+  }
+
+  void _disconnect() {
     _timeoutTimer?.cancel();
     _timeoutTimer = null;
 
